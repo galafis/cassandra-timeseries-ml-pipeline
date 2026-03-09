@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  # -----------------------------------------------------------
+  # Apache Cassandra single-node cluster
+  # -----------------------------------------------------------
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra-ts
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: "ts-pipeline"
+      CASSANDRA_DC: "datacenter1"
+      CASSANDRA_ENDPOINT_SNITCH: "GossipingPropertyFileSnitch"
+      MAX_HEAP_SIZE: "512M"
+      HEAP_NEWSIZE: "128M"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE keyspaces'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - pipeline-net
+
+  # -----------------------------------------------------------
+  # ML Pipeline application
+  # -----------------------------------------------------------
+  pipeline:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ts-pipeline-app
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    environment:
+      CASSANDRA_HOSTS: "cassandra"
+      CASSANDRA_PORT: "9042"
+      CASSANDRA_KEYSPACE: "timeseries"
+      LOG_LEVEL: "INFO"
+    networks:
+      - pipeline-net
+
+volumes:
+  cassandra-data:
+
+networks:
+  pipeline-net:
+    driver: bridge
